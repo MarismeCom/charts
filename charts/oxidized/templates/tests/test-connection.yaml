@@ -1,0 +1,29 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "oxidized.fullname" . }}-test-connection"
+  namespace: {{ include "oxidized.namespace" . }}
+  labels:
+    {{- include "oxidized.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- $imagePullSecrets := include "oxidized.imagePullSecrets" . | trim }}
+  {{- if $imagePullSecrets }}
+  imagePullSecrets:
+    {{- $imagePullSecrets | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: wget
+      image: {{ include "oxidized.testImage" . | quote }}
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      command:
+        - wget
+      args:
+        - "-qO-"
+        - "http://{{ include "oxidized.fullname" . }}:{{ .Values.service.port }}/"
+{{- end }}

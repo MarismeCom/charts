@@ -1,0 +1,234 @@
+{{- $runtimeSecretKeys := .Values.runtimeSecret.secretKeys -}}
+{{- $deviceUsernameKey := $runtimeSecretKeys.deviceUsernameKey | default $runtimeSecretKeys.defaultUsernameKey -}}
+{{- $devicePasswordKey := $runtimeSecretKeys.devicePasswordKey | default $runtimeSecretKeys.defaultPasswordKey -}}
+{{- $readonlyDeviceUsernameKey := $runtimeSecretKeys.readonlyDeviceUsernameKey | default $runtimeSecretKeys.readonlyUsernameKey -}}
+{{- $readonlyDevicePasswordKey := $runtimeSecretKeys.readonlyDevicePasswordKey | default $runtimeSecretKeys.readonlyPasswordKey -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oxidized.fullname" . }}
+  namespace: {{ include "oxidized.namespace" . }}
+  labels:
+    {{- include "oxidized.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-service
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+  selector:
+    matchLabels:
+      {{- include "oxidized.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxidized.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backup-service
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if not .Values.config.existingConfigmap }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if and .Values.runtimeSecret.create (not .Values.runtimeSecret.existingSecret) }}
+        checksum/runtime-secret: {{ include (print $.Template.BasePath "/secret-runtime.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.sshSecret.create }}
+        checksum/ssh-secret: {{ include (print $.Template.BasePath "/secret-ssh.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "oxidized.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- $imagePullSecrets := include "oxidized.imagePullSecrets" . | trim }}
+      {{- if $imagePullSecrets }}
+      imagePullSecrets:
+        {{- $imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: init-ssh
+          image: {{ include "oxidized.initImage" . | quote }}
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /home/oxidized/.ssh &&
+              cp /ssh-secret/id_rsa /home/oxidized/.ssh/id_rsa &&
+              cp /ssh-secret/id_rsa.pub /home/oxidized/.ssh/id_rsa.pub &&
+              cp /ssh-secret/known_hosts /home/oxidized/.ssh/known_hosts &&
+              cp /config-template/config /config-rendered/config &&
+              sed -i "s|__OXIDIZED_DEVICE_USERNAME__|${OXIDIZED_DEVICE_USERNAME}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_DEVICE_PASSWORD__|${OXIDIZED_DEVICE_PASSWORD}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_DEFAULT_USERNAME__|${OXIDIZED_DEVICE_USERNAME}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_DEFAULT_PASSWORD__|${OXIDIZED_DEVICE_PASSWORD}|g" /config-rendered/config &&
+              sed -i "s|__NETBOX_API_TOKEN__|${NETBOX_API_TOKEN}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_READONLY_DEVICE_USERNAME__|${OXIDIZED_READONLY_DEVICE_USERNAME}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_READONLY_DEVICE_PASSWORD__|${OXIDIZED_READONLY_DEVICE_PASSWORD}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_READONLY_USERNAME__|${OXIDIZED_READONLY_DEVICE_USERNAME}|g" /config-rendered/config &&
+              sed -i "s|__OXIDIZED_READONLY_PASSWORD__|${OXIDIZED_READONLY_DEVICE_PASSWORD}|g" /config-rendered/config &&
+              sed -i "/^[[:space:]]*$/d" /config-rendered/config &&
+              chmod 750 /home/oxidized/.ssh &&
+              chmod 640 /home/oxidized/.ssh/id_rsa &&
+              chmod 644 /home/oxidized/.ssh/id_rsa.pub &&
+              chmod 640 /home/oxidized/.ssh/known_hosts &&
+              chmod 640 /config-rendered/config
+          env:
+            - name: OXIDIZED_DEVICE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oxidized.runtimeSecretName" . }}
+                  key: {{ $deviceUsernameKey }}
+            - name: OXIDIZED_DEVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oxidized.runtimeSecretName" . }}
+                  key: {{ $devicePasswordKey }}
+            - name: NETBOX_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oxidized.runtimeSecretName" . }}
+                  key: {{ .Values.runtimeSecret.secretKeys.netboxApiTokenKey }}
+            - name: OXIDIZED_READONLY_DEVICE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oxidized.runtimeSecretName" . }}
+                  key: {{ $readonlyDeviceUsernameKey }}
+            - name: OXIDIZED_READONLY_DEVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oxidized.runtimeSecretName" . }}
+                  key: {{ $readonlyDevicePasswordKey }}
+          securityContext:
+            {{- toYaml .Values.initContainerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: ssh-secret
+              mountPath: /ssh-secret
+              readOnly: true
+            - name: config-template
+              mountPath: /config-template
+              readOnly: true
+            - name: config-rendered
+              mountPath: /config-rendered
+            - name: ssh-dir
+              mountPath: /home/oxidized/.ssh
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: oxidized
+          image: {{ include "oxidized.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+          env:
+            - name: CONFIG_RELOAD_INTERVAL
+              value: {{ .Values.configReloadInterval | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- $containerSecurityContext := .Values.containerSecurityContext | default .Values.securityContext }}
+          {{- with $containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /home/oxidized/.config/oxidized
+            - name: config-rendered
+              mountPath: /home/oxidized/.config/oxidized/config
+              subPath: config
+            - name: ssh-dir
+              mountPath: /home/oxidized/.ssh
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: ssh-secret
+          secret:
+            secretName: {{ include "oxidized.sshSecretName" . }}
+        - name: ssh-dir
+          emptyDir: {}
+        - name: config-template
+          configMap:
+            name: {{ include "oxidized.configMapName" . }}
+        - name: config-rendered
+          emptyDir: {}
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "oxidized.pvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

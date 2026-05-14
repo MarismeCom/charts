@@ -1,0 +1,23 @@
+{{- if not .Values.config.existingConfigmap }}
+{{- $configuration := include "oxidized.defaultConfiguration" . }}
+{{- if .Values.config.configuration }}
+{{- $configuration = tpl .Values.config.configuration . }}
+{{- end }}
+{{- $configuration = regexReplaceAll "(?m)^[[:blank:]]+$" $configuration "" }}
+{{- $configuration = regexReplaceAll "\n{2,}" $configuration "\n" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oxidized.configMapName" . }}
+  namespace: {{ include "oxidized.namespace" . }}
+  labels:
+    {{- include "oxidized.labels" . | nindent 4 }}
+    app.kubernetes.io/component: configuration
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  config: |-
+{{ $configuration | trim | indent 4 }}
+{{- end }}

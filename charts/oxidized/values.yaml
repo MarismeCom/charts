@@ -1,0 +1,619 @@
+# Override the full generated resource name. Keeping this as `oxidized`
+# preserves compatibility with the standalone manifests in this repository.
+fullnameOverride: oxidized
+nameOverride: ""
+
+# Global values shared by this chart and optional subcharts. Follows the common
+# Bitnami chart pattern where local storage settings can inherit
+# `global.storageClass`.
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  defaultStorageClass: ""
+  # Deprecated: use `global.defaultStorageClass`.
+  storageClass: ""
+
+# Labels and annotations added to all chart-managed resources.
+commonLabels: {}
+commonAnnotations: {}
+
+# Namespace settings for Helm-managed installs.
+# Set `create: true` only if you want the chart to create the namespace.
+namespace:
+  create: false
+  name: oxidized
+
+# Main Oxidized application image.
+# Pin `tag` to a tested version before using this in production.
+image:
+  registry: ""
+  repository: oxidized/oxidized
+  tag: "0.36.0"
+  pullPolicy: IfNotPresent
+
+# Optional image pull secrets for private registries.
+imagePullSecrets: []
+
+# Init container image used to prepare SSH files and render the final config.
+initImage:
+  registry: ""
+  repository: alpine
+  tag: "3.22"
+  pullPolicy: IfNotPresent
+
+# Basic workload sizing and rollout history.
+replicaCount: 1
+revisionHistoryLimit: 3
+
+# `Recreate` is conservative and matches the current manifest behavior.
+# If your storage and runtime behavior allow it, you can evaluate RollingUpdate.
+strategy:
+  type: Recreate
+
+# ServiceAccount handling.
+# If `create: false` and `name` is empty, the chart will fall back to the
+# cluster default ServiceAccount.
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: false
+
+# Pod-level filesystem group for mounted volumes.
+podSecurityContext:
+  fsGroup: 30000
+  fsGroupChangePolicy: OnRootMismatch
+
+# Main container security settings. Empty by default so the upstream
+# oxidized/oxidized image can initialize its runit services correctly.
+# Override this only after validating the image works with your restricted
+# security profile.
+containerSecurityContext: {}
+# Deprecated alias kept for compatibility. Prefer `containerSecurityContext`,
+# matching the naming style used by Bitnami charts.
+securityContext: {}
+
+# The init container prepares SSH files and renders the final config. It avoids
+# chown so it can run on clusters that restrict root capabilities.
+initContainerSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# Grace period before Pod termination.
+terminationGracePeriodSeconds: 30
+
+# Cluster-internal service exposure.
+service:
+  type: ClusterIP
+  port: 8888
+  targetPort: 8888
+  annotations: {}
+
+# Passed to the Oxidized container as CONFIG_RELOAD_INTERVAL.
+configReloadInterval: "600"
+
+# Optional command override for the main container. Empty by default so the
+# upstream image entrypoint can start its bundled runit services normally.
+command: []
+args: []
+
+# Resource requests and limits for the main Oxidized container.
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m
+
+# Health checks for startup, readiness, and liveness.
+probes:
+  startup:
+    periodSeconds: 10
+    failureThreshold: 18
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+# Optional Pod metadata and scheduling controls.
+podLabels: {}
+podAnnotations: {}
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Extra environment variables for the main Oxidized container.
+extraEnv: []
+
+# Optional lifecycle hooks for the main Oxidized container.
+lifecycle: {}
+
+# Optional extra volume mounts for the main Oxidized container.
+extraVolumeMounts: []
+
+# Optional extra volumes added to the Pod.
+extraVolumes: []
+
+# Optional extra init containers appended after the built-in init container.
+extraInitContainers: []
+
+# Optional sidecar containers appended after the main Oxidized container.
+sidecars: []
+
+# Optional topology spread constraints.
+topologySpreadConstraints: []
+
+# Optional `helm test` Pod that checks the web service endpoint.
+tests:
+  enabled: true
+  image:
+    registry: ""
+    repository: busybox
+    tag: "1.36"
+    pullPolicy: IfNotPresent
+
+# Persistent storage for `/home/oxidized/.config/oxidized`.
+# If `enabled: false`, the chart will use `emptyDir` instead.
+# If `existingClaim` is set, the chart will reuse that PVC and skip PVC creation.
+persistence:
+  enabled: true
+  existingClaim: ""
+  # StorageClass used by the PVC. If empty, `global.storageClass` is used.
+  # Set to "-" to disable dynamic provisioning and use the cluster default
+  # static binding behavior.
+  storageClass: ""
+  # Deprecated alias kept for compatibility. Prefer `storageClass`.
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 50Gi
+
+# SSH Secret used by Oxidized to push backups to the remote Git repository.
+# Recommended production pattern:
+# 1. create the Secret outside Helm
+# 2. set `create: false`
+# 3. set `existingSecret` to the existing Secret name
+# Avoid storing real private keys in version-controlled values files.
+sshSecret:
+  create: true
+  existingSecret: ""
+  name: ""
+  data:
+    id_rsa: ""
+    id_rsa_pub: ""
+    known_hosts: ""
+
+# Runtime credentials used by the init container to render the final Oxidized config.
+# This follows the common official-chart pattern:
+# - set `create: true` to let the chart create a Secret from `data`
+# - set `existingSecret` to reuse a Secret created outside Helm
+# - customize `secretKeys` when your existing Secret uses different key names
+# Avoid storing real credentials in version-controlled values files.
+runtimeSecret:
+  create: true
+  existingSecret: ""
+  name: ""
+  # Secret key names used by the init container. Device credentials are used to
+  # log in to network devices; the NetBox token is used by the HTTP source.
+  secretKeys:
+    deviceUsernameKey: "OXIDIZED_DEVICE_USERNAME"
+    devicePasswordKey: "OXIDIZED_DEVICE_PASSWORD"
+    netboxApiTokenKey: "NETBOX_API_TOKEN"
+    readonlyDeviceUsernameKey: "OXIDIZED_READONLY_DEVICE_USERNAME"
+    readonlyDevicePasswordKey: "OXIDIZED_READONLY_DEVICE_PASSWORD"
+  # Secret values used only when `runtimeSecret.create` is true.
+  data:
+    deviceUsername: ""
+    devicePassword: ""
+    netboxApiToken: ""
+    readonlyDeviceUsername: ""
+    readonlyDevicePassword: ""
+
+# Basic NetworkPolicy controls.
+# Disabled by default. If enabled, narrow the CIDR and allowed ports to your
+# real NetBox, Git, DNS, and device management networks.
+networkPolicy:
+  enabled: false
+  ingress:
+    enabled: false
+    fromAllNamespaces: true
+    # Additional NetworkPolicyPeer entries. Used when you need tighter ingress
+    # control than `fromAllNamespaces`.
+    from: []
+  egress:
+    enabled: false
+    cidr: 0.0.0.0/0
+    ports:
+      - protocol: TCP
+        port: 22
+      - protocol: TCP
+        port: 80
+      - protocol: TCP
+        port: 443
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
+# Optional ingress for exposing the Oxidized web UI.
+# Disabled by default. Update `className`, `hosts`, and `tls` to match your cluster.
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+  hosts:
+    - host: oxidized.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Oxidized configuration fields.
+# Fixed parameters are always rendered. Optional sections use `enabled` flags.
+# Sensitive values stay as placeholders and are replaced at runtime from
+# `runtimeSecret` by the init container.
+config:
+  # Name of an existing ConfigMap containing the `config` key. When set, this
+  # chart will not create the Oxidized ConfigMap.
+  existingConfigmap: ""
+  # Full Oxidized configuration override. Similar to Bitnami PostgreSQL
+  # `primary.configuration`; when set, it replaces the field-generated default.
+  configuration: ""
+  # Core options are always rendered into the Oxidized config file.
+  # Credentials are placeholders; the init container replaces them with values
+  # read from `runtimeSecret`.
+  core:
+    # Default network device username placeholder.
+    usernamePlaceholder: "__OXIDIZED_DEVICE_USERNAME__"
+    # Default network device password placeholder.
+    passwordPlaceholder: "__OXIDIZED_DEVICE_PASSWORD__"
+    # Fallback model used when a source does not provide one.
+    model: "comware"
+    # Poll interval in seconds. Set to 0 to disable periodic fetches.
+    interval: 3600
+    # Enable legacy syslog logging flag.
+    useSyslog: false
+    # Optional log file path. Empty means omit `log`.
+    log: ""
+    # Debug mode. If true, Oxidized also raises logger verbosity.
+    debug: false
+    # Maximum worker threads.
+    threads: 30
+    # If false, Oxidized chooses active thread count based on interval.
+    useMaxThreads: false
+    # Per-operation timeout in seconds.
+    timeout: 60
+    # Maximum total fetch time in seconds.
+    timelimit: 300
+    # Retry count before marking a fetch failed.
+    retries: 3
+    # Device prompt regexp rendered as `!ruby/regexp`.
+    prompt: '/^([\w.@-]+[#>]\s?)$/'
+    # Add a job immediately when a node is moved to the front of the queue.
+    nextAddsJob: false
+    # Whether node names should be DNS-resolved.
+    resolveDns: true
+    # Run once and exit.
+    runOnce: false
+    # PID file path.
+    pid: /home/oxidized/.config/oxidized/pid
+
+  # Global vars block. These can also be overridden per model, group, or node.
+  vars:
+    # Optional privileged-mode enable password.
+    enable:
+      enabled: false
+      value: ""
+    # Strip secrets from stored configs when supported by the model.
+    removeSecret: true
+    # Add metadata headers/footers to stored configs.
+    metadata:
+      enabled: false
+      value: true
+      top: "%{comment}Fetched by Oxidized with model %{model} from host %{name} [%{ip}]\\n"
+      bottom: ""
+    # Store only significant configuration changes when the model supports it.
+    outputStoreMode:
+      enabled: false
+      value: on_significant
+    # Extra global vars rendered as snake_case keys.
+    extra: {}
+
+  # Optional group alias mapping, including regexp keys when needed.
+  groupMap: {}
+
+  # Optional SemanticLogger configuration.
+  logger:
+    enabled: false
+    level: ":info"
+    # Example appender:
+    # - type: stdout
+    #   level: :info
+    appenders: []
+
+  # Deprecated REST syntax. Prefer `extensions.oxidizedWeb`.
+  rest:
+    enabled: false
+    listen: "0.0.0.0"
+    port: 8888
+    urlPrefix: ""
+
+  # Optional extension blocks.
+  extensions:
+    # Oxidized web UI and REST API extension.
+    oxidizedWeb:
+      enabled: true
+      load: true
+      listen: "0.0.0.0"
+      port: 8888
+      urlPrefix: ""
+      vhosts: []
+
+  # Crash dump settings.
+  crash:
+    directory: /home/oxidized/.config/oxidized/crashes
+    hostnames: false
+
+  # Runtime statistics settings.
+  stats:
+    historySize: 10
+
+  # Input modules. `default` should reference enabled inputs.
+  input:
+    default: "ssh"
+    debug: false
+    utf8Encoded: true
+    # SSH input configuration.
+    ssh:
+      enabled: true
+      secure: false
+      authMethods:
+        - password
+      # Optional SSH key paths for Oxidized input authentication.
+      sshKeys: []
+      sshNoExec: false
+      sshNoKeepalive: false
+      # Legacy algorithms may be required for older network devices.
+      kex:
+        - diffie-hellman-group1-sha1
+        - diffie-hellman-group14-sha1
+        - diffie-hellman-group-exchange-sha256
+      encryption:
+        - aes128-cbc
+        - aes256-cbc
+        - 3des-cbc
+      hmac:
+        - hmac-sha1
+        - hmac-sha2-256
+    # Telnet input. Disabled by default.
+    telnet:
+      enabled: false
+      secure: false
+
+  # Output modules. `default` should reference one enabled output.
+  output:
+    default: git
+    # Remove configs for nodes no longer present in the active source.
+    cleanObsoleteNodes: true
+    # Git output backed by rugged/libgit2.
+    git:
+      enabled: true
+      user: Oxidized
+      email: it@daocloud.io
+      repo: /home/oxidized/.config/oxidized/oxidized.git
+      singleRepo: true
+    # File output stores one config file per device.
+    file:
+      enabled: false
+      directory: /home/oxidized/.config/oxidized/configs
+    # HTTP output POSTs config JSON to an external endpoint.
+    http:
+      enabled: false
+      url: ""
+      user: ""
+      password: ""
+      sslVerify: false
+      headers: {}
+    # GitCrypt output stores encrypted configs using git-crypt.
+    gitCrypt:
+      enabled: false
+      user: Oxidized
+      email: it@daocloud.io
+      repo: /home/oxidized/.config/oxidized/oxidized.git
+      singleRepo: false
+      users: []
+
+  # Hooks run on Oxidized events. Enable only the hooks you need.
+  hooks:
+    # Push stored Git changes to a remote repository.
+    gitlabrepo:
+      enabled: true
+      type: githubrepo
+      events:
+        - post_store
+      remoteRepo: ""
+      privateKey: /home/oxidized/.ssh/id_rsa
+      publicKey: /home/oxidized/.ssh/id_rsa.pub
+      noVerifyHostKey: true
+    # Execute a local command on matching events.
+    exec:
+      enabled: false
+      type: exec
+      events:
+        - node_success
+      cmd: ""
+      timeout: 60
+      async: false
+    # Send diffs to Slack.
+    slackdiff:
+      enabled: false
+      type: slackdiff
+      events:
+        - post_store
+      token: ""
+      channel: ""
+    # Send diffs to XMPP rooms.
+    xmppdiff:
+      enabled: false
+      type: xmppdiff
+      events:
+        - post_store
+      server: ""
+      username: ""
+      password: ""
+      rooms: []
+
+  # Source modules. `default` should reference one enabled source.
+  source:
+    default: "http"
+    # CSV source, often backed by router.db.
+    csv:
+      enabled: false
+      file: /home/oxidized/.config/oxidized/router.db
+      delimiter: "!ruby/regexp /:/"
+      gpg: false
+      gpgPassword: ""
+      map:
+        name: 0
+        ip: 1
+        model: 2
+        username: 3
+        password: 4
+      varsMap: {}
+    # HTTP source. This chart defaults to a NetBox-style API response.
+    # https://netbox.marisme.com/api/dcim/devices/?status=active&tag=oxidized&limit=500
+    http:
+      enabled: true
+      url: ""
+      scheme: "https"
+      secure: true
+      user: ""
+      pass: ""
+      readTimeout: 120
+      pagination: false
+      paginationKeyName: next
+      hostsLocation: results
+      headers:
+        Authorization: "Bearer __NETBOX_API_TOKEN__"
+      map:
+        name: name
+        ip: primary_ip.address
+        model: platform.slug
+        group: platform.slug
+      varsMap: {}
+    # SQL source using the sequel gem.
+    sql:
+      enabled: false
+      adapter: sqlite
+      database: /home/oxidized/.config/oxidized/router.db
+      table: nodes
+      user: ""
+      password: ""
+      query: ""
+      withSsl: false
+      sslMode: ""
+      sslCa: ""
+      sslCert: ""
+      sslKey: ""
+      map:
+        name: name
+        model: model
+      varsMap: {}
+    # JSON file source.
+    jsonfile:
+      enabled: false
+      file: /home/oxidized/.config/oxidized/router.json
+      gpg: false
+      gpgPassword: ""
+      map:
+        name: name
+        model: model
+      varsMap: {}
+
+  # Map platform/source model names to Oxidized model names.
+  modelMap:
+    huawei: vrp
+    h3c: comware
+    aruba-aosw: aosw
+    aruba-aoscx: aoscx
+    fortinet: fortios
+    ruijie: rgos
+
+  # Group-specific credentials and overrides.
+  groups:
+    huawei:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+    h3c:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+    fortinet:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+    fortios:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+    ruijie:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+    aruba-aosw:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+    aruba-aoscx:
+      usernamePlaceholder: "__OXIDIZED_READONLY_DEVICE_USERNAME__"
+      passwordPlaceholder: "__OXIDIZED_READONLY_DEVICE_PASSWORD__"
+      vars: {}
+      models: {}
+      extra: {}
+
+  # Model-specific credentials and variables.
+  models:
+    fortios:
+      username: ""
+      password: ""
+      vars:
+        fullconfig: true
+        fortiosAutoupdate: false
+    vrp:
+      username: ""
+      password: ""
+      vars:
+        removeSecret: true
+    comware:
+      username: ""
+      password: ""
+      vars:
+        removeSecret: true

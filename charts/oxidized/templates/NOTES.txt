@@ -1,0 +1,28 @@
+Oxidized has been installed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ include "oxidized.namespace" . }}
+
+Service:
+  {{ include "oxidized.fullname" . }}:{{ .Values.service.port }}
+
+{{- if .Values.ingress.enabled }}
+Ingress:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+To access the web UI locally:
+  kubectl -n {{ include "oxidized.namespace" . }} port-forward svc/{{ include "oxidized.fullname" . }} 8888:{{ .Values.service.port }}
+{{- end }}
+
+Required Secrets:
+  SSH Secret: {{ include "oxidized.sshSecretName" . }}
+  Runtime Secret: {{ include "oxidized.runtimeSecretName" . }}
+
+{{- if or (and .Values.sshSecret.create (not .Values.sshSecret.existingSecret)) (and .Values.runtimeSecret.create (not .Values.runtimeSecret.existingSecret)) }}
+Reminder:
+  This release created one or more Secrets from chart values. Default secret
+  data is empty; set real credentials or use existing Secrets before
+  production.
+{{- end }}
