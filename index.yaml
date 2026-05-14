@@ -1,0 +1,33 @@
+apiVersion: v1
+entries:
+  oxidized:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial Oxidized Helm chart release.
+      artifacthub.io/images: |
+        - name: oxidized
+          image: oxidized/oxidized:0.36.0
+        - name: init
+          image: alpine:3.22
+        - name: test
+          image: busybox:1.36
+    apiVersion: v2
+    appVersion: 0.36.0
+    created: "2026-05-14T18:11:58.930491+08:00"
+    description: Helm chart for deploying Oxidized on Kubernetes
+    digest: 6d2a8c923ff1e3cbcf967d9e59dcde3f79ffe152d94fbfee667b70b9ba7ca27e
+    home: https://github.com/ytti/oxidized
+    keywords:
+    - oxidized
+    - network-backup
+    - network-automation
+    - configuration-backup
+    name: oxidized
+    sources:
+    - https://github.com/ytti/oxidized
+    type: application
+    urls:
+    - https://marismecom.github.io/charts/oxidized-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-05-14T18:11:58.928096+08:00"
