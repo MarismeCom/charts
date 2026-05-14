@@ -1,6 +1,6 @@
 # Fill `repositoryID` after the repository has been added in Artifact Hub.
 # The ID is shown in the Artifact Hub control panel repository card.
-repositoryID: ""
+repositoryID: "764346e7-2c28-4d35-973e-f7df8e9a203c"
 owners:
   - name: MarismeCom
     email: "airsmon@gmail.com"
